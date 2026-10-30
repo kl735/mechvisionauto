@@ -1,0 +1,8 @@
+{
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "python.testing.pytestArgs": [
+            "."
+        ],
+        "python.defaultInterpreterPath": "C:\\Users\\mech-mind\\AppData\\Local\\Programs\\Python\\Python312\\python.exe"
+}
