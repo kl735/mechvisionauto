@@ -12,13 +12,14 @@ import cv2
 import numpy as np
 import win32con  # pyright: ignore[reportMissingModuleSource]
 import win32gui  # pyright: ignore[reportMissingModuleSource]
+import win32process  # pyright: ignore[reportMissingModuleSource]
 import win32ui  # pyright: ignore[reportMissingModuleSource]
 from PIL import Image, ImageDraw, ImageFont, ImageGrab
-from pywinauto import keyboard, mouse
+from pywinauto import Application, keyboard, mouse
 
 
 WINDOW_TITLE = "Mech-Vision"
-TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
+TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 DEFAULT_THRESHOLD = 0.8
 TEXT_MATCH_THRESHOLD = 0.55
 LOCATE_TIMEOUT = 15
@@ -189,18 +190,23 @@ def locate_step_help_icon(
     step_title_template: str | Path,
     help_icon_template: str | Path,
     threshold: float = DEFAULT_THRESHOLD,
+    help_threshold: float | None = None,
     timeout: float = LOCATE_TIMEOUT,
+    hwnd: int | None = None,
+    scales: tuple[float, ...] = (1.0, 0.9, 1.1),
 ) -> tuple[ImageMatch, ImageMatch, Image.Image, tuple[int, int]]:
     """先定位 Step 标题，再在标题右侧查找问号帮助图标。"""
     title_match, screenshot, origin = locate_template(
         step_title_template,
         threshold=threshold,
         timeout=timeout,
+        hwnd=hwnd,
+        scales=scales,
     )
     help_region = (
-        title_match.left + title_match.width - 8,
+        title_match.left + max(0, title_match.width - 48),
         title_match.top - 12,
-        72,
+        112,
         title_match.height + 24,
     )
     help_match = match_on_image(
@@ -208,7 +214,8 @@ def locate_step_help_icon(
         origin,
         help_icon_template,
         region=help_region,
-        threshold=threshold,
+        threshold=help_threshold or threshold,
+        scales=scales,
     )
     return title_match, help_match, screenshot, origin
 
@@ -317,6 +324,7 @@ def locate_template(
     timeout: float = LOCATE_TIMEOUT,
     scales: tuple[float, ...] = (1.0, 0.9, 1.1),
     region: tuple[int, int, int, int] | None = None,
+    hwnd: int | None = None,
 ) -> tuple[ImageMatch, Image.Image, tuple[int, int]]:
     """在 Mech-Vision 窗口中定位模板图，超时则抛出异常。"""
     _ensure_dpi_aware()
@@ -325,7 +333,8 @@ def locate_template(
         raise FileNotFoundError(f"未找到模板图：{template_file}")
 
     template = _read_template(template_file)
-    hwnd = find_mech_vision_hwnd()
+    if hwnd is None:
+        hwnd = find_mech_vision_hwnd()
     try:
         win32gui.SetForegroundWindow(hwnd)
     except Exception:
@@ -417,6 +426,84 @@ def hover_match(match: ImageMatch, seconds: float = 2.0) -> None:
     """鼠标悬停在匹配中心指定秒数，用于弹出问号提示。"""
     mouse.move(coords=match.center)
     time.sleep(seconds)
+
+
+def visible_tooltip_handles(main_hwnd: int | None = None) -> set[int]:
+    """返回当前 Mech-Vision 进程中可见的 Qt Tooltip 句柄。"""
+    if main_hwnd is None:
+        main_hwnd = find_mech_vision_hwnd()
+    _, process_id = win32process.GetWindowThreadProcessId(main_hwnd)
+    handles: set[int] = set()
+
+    def collect_tooltips(hwnd: int, _: object) -> bool:
+        _, window_process_id = win32process.GetWindowThreadProcessId(hwnd)
+        class_name = win32gui.GetClassName(hwnd)
+        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+        width = right - left
+        height = bottom - top
+        if (
+            window_process_id == process_id
+            and win32gui.IsWindowVisible(hwnd)
+            and "tooltip" in class_name.casefold()
+            and 10 < width <= 800
+            and 10 < height <= 600
+        ):
+            handles.add(hwnd)
+        return True
+
+    win32gui.EnumWindows(collect_tooltips, None)
+    return handles
+
+
+def wait_for_visible_tooltip(
+    timeout: float = 5,
+    ignored_handles: set[int] | None = None,
+    main_hwnd: int | None = None,
+) -> str:
+    """等待当前 Mech-Vision 进程显示新的、内容非空的 Qt Tooltip。"""
+    ignored = ignored_handles or set()
+    deadline = time.monotonic() + timeout
+
+    while time.monotonic() < deadline:
+        for hwnd in visible_tooltip_handles(main_hwnd) - ignored:
+            window_title = win32gui.GetWindowText(hwnd).strip()
+            texts = [] if window_title == WINDOW_TITLE else [window_title]
+
+            def collect_child_text(child_hwnd: int, _: object) -> bool:
+                texts.append(win32gui.GetWindowText(child_hwnd).strip())
+                return True
+
+            win32gui.EnumChildWindows(hwnd, collect_child_text, None)
+            try:
+                tooltip_app = Application(backend="uia").connect(handle=hwnd)
+                tooltip = tooltip_app.window(handle=hwnd)
+                texts.extend(
+                    control.window_text().strip()
+                    for control in tooltip.descendants()
+                )
+            except Exception:
+                pass
+
+            content = "\n".join(dict.fromkeys(text for text in texts if text))
+            if content:
+                return content
+
+            left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+            tooltip_image = ImageGrab.grab(
+                bbox=(left, top, right, bottom),
+                all_screens=True,
+            )
+            pixels = np.asarray(tooltip_image.convert("L"))
+            if pixels.size and float(pixels.std()) >= 2:
+                return (
+                    "Step 说明已可见"
+                    f"（Qt 未暴露文本，窗口大小 {right - left}x{bottom - top}）"
+                )
+        time.sleep(0.1)
+
+    raise TimeoutError(
+        f"{timeout} 秒内未检测到内容非空的 Mech-Vision Tooltip"
+    )
 
 
 def grab_full_screen(output_path: str | Path) -> Path:

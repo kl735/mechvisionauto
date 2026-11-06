@@ -3,11 +3,10 @@
 
 from pathlib import Path
 
-from pages.step_library_page import StepLibraryPage
+from pages.main_window_page import MainWindowPage
 from services import VisionSdkClient
 
 
-STARTUP_TIMEOUT = 60
 STEP_NAME = "AI分类（正反/有无）"
 STEP_COUNT = 3
 COLUMNS = 3
@@ -30,26 +29,18 @@ def canvas_destinations(canvas_rect, count: int) -> list[tuple[int, int]]:
     return points
 
 
-def test_create_multiple_ai_classify_steps(mech_win, tmp_path: Path) -> None:
+def test_create_multiple_ai_classify_steps(
+    main_page: MainWindowPage,
+    tmp_path: Path,
+) -> None:
     """重复拖入 Step、保存方案，并通过 SDK 校验全部 Step 名称。"""
     # 定位步骤库
-    step_library = StepLibraryPage(mech_win, timeout=STARTUP_TIMEOUT)
+    step_library = main_page.step_library
     step_library.dock()
     print("步骤库定位成功")
 
     # 定位工程编辑区
-    editor = mech_win.child_window(
-        title="工程编辑区",
-        class_name="mmind::tailor_impl::TDockWidget",
-    )
-    editor.wait("exists", timeout=STARTUP_TIMEOUT)
-
-    # 定位画布 ScaleGraphicsView
-    canvas = editor.child_window(
-        class_name="mmind::ScaleGraphicsView",
-        control_type="Group",
-    )
-    canvas.wait("exists", timeout=STARTUP_TIMEOUT)
+    canvas = main_page.project_editor.canvas()
     print("画布定位成功")
 
     # 计算多个不重叠的落点
@@ -57,7 +48,7 @@ def test_create_multiple_ai_classify_steps(mech_win, tmp_path: Path) -> None:
 
     # 每次重新定位步骤库节点，再拖到对应落点
     for index, destination in enumerate(destinations, start=1):
-        mech_win.set_focus()
+        main_page.focus()
         step_item = step_library.locate(STEP_NAME)
         step_rect = step_item.rectangle()
         print(

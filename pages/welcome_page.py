@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from pywinauto import Application
+
 WELCOME_DIALOG_ID = "mmind__TypicalProjectDlg"
 TITLE_BAR_PREFIX = f"{WELCOME_DIALOG_ID}.frame.titleBarWidget.normalTitleBar"
 WELCOME_PREFIX = (
@@ -76,6 +78,23 @@ class WelcomePage:
         self.main_window = main_window
         self.timeout = timeout
         self.recent = RecentUsePanel(self)
+
+    @classmethod
+    def attach(cls, app, timeout: float = 30) -> "WelcomePage":
+        """用 Win32 定位欢迎窗口，再通过句柄连接 UIA。"""
+        if app is None:
+            raise RuntimeError("Mech-Vision 尚未启动")
+
+        native_window = app.window(
+            title="欢迎使用Mech-Vision",
+        )
+        native_window.wait(
+            "exists visible",
+            timeout=timeout,
+            retry_interval=0.1,
+        )
+        uia_app = Application(backend="uia").connect(handle=native_window.handle)
+        return cls(uia_app.window(handle=native_window.handle), timeout=timeout)
 
     def exists(self, timeout: float = 5) -> bool:
         """欢迎首页是否存在。"""
