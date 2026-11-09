@@ -12,7 +12,6 @@ import win32con  # pyright: ignore[reportMissingModuleSource]
 import win32gui  # pyright: ignore[reportMissingModuleSource]
 from pywinauto import keyboard, mouse
 
-from pages.context_menu_page import ContextMenuPage
 from pages.main_window_page import MainWindowPage
 from services import VisionSdkClient
 from utils.image_locator import (
@@ -175,7 +174,7 @@ def delete_project_step_by_context_menu(
         match.top + int(match.height * 0.5),
     )
     mouse.click(button="right", coords=point)
-    context_menu = ContextMenuPage.wait_for_open(hwnd)
+    context_menu = main_page.project_editor.wait_for_step_context_menu()
     context_menu.delete()
 
     wait_for_project_steps_empty(sdk, project_name)

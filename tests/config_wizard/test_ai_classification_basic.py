@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import time
 
+from pywinauto import mouse
+
 from pages.ai_classification_config_page import AiClassificationConfigPage
-from pages.message_box_page import MessageBoxPage
 
 
 def test_M85028_0673_model_list_is_visible(
@@ -34,8 +35,14 @@ def test_M85028_0674_create_model(
         assert after_count == original_count + 1
     finally:
         if created:
-            _, restored_count, _ = page.delete_model(-1)
-            assert restored_count == original_count
+            page.open_delete_model_dialog(-1).confirm()
+
+            deadline = time.monotonic() + page.timeout
+            while time.monotonic() < deadline:
+                if page.model_count() == original_count:
+                    break
+                time.sleep(0.2)
+            assert page.model_count() == original_count
 
 
 def test_M85028_0677_rename_model_confirm(
@@ -61,12 +68,7 @@ def test_M85028_0677_rename_model_confirm(
         assert page.model_name(-1) == expected_name
     finally:
         if created:
-            page.click_model_menu(-1, "删除")
-            message_box = MessageBoxPage.wait_for_open(
-                page.handle,
-                timeout=page.timeout,
-            )
-            message_box.confirm()
+            page.open_delete_model_dialog(-1).confirm()
 
             deadline = time.monotonic() + page.timeout
             while time.monotonic() < deadline:
@@ -97,12 +99,7 @@ def test_M85028_0677_rename_model_cancel(
         assert page.model_name(-1) != new_name
     finally:
         if created:
-            page.click_model_menu(-1, "删除")
-            message_box = MessageBoxPage.wait_for_open(
-                page.handle,
-                timeout=page.timeout,
-            )
-            message_box.confirm()
+            page.open_delete_model_dialog(-1).confirm()
 
             deadline = time.monotonic() + page.timeout
             while time.monotonic() < deadline:
@@ -124,8 +121,18 @@ def test_M85028_0678_0679_delete_model_confirm(
     try:
         _, created_count = page.create_model()
         created = True
-        before_count, after_count, message = page.delete_model(-1)
+        before_count = page.model_count()
+        message_box = page.open_delete_model_dialog(-1)
+        message = message_box.message()
+        message_box.confirm()
         created = False
+
+        deadline = time.monotonic() + page.timeout
+        while time.monotonic() < deadline:
+            if page.model_count() == original_count:
+                break
+            time.sleep(0.2)
+        after_count = page.model_count()
 
         assert before_count == created_count
         assert after_count == original_count
@@ -133,7 +140,7 @@ def test_M85028_0678_0679_delete_model_confirm(
         assert "无法恢复" in message
     finally:
         if created:
-            page.delete_model(-1)
+            page.open_delete_model_dialog(-1).confirm()
 
 
 def test_M85028_0680_delete_model_cancel(
@@ -143,11 +150,7 @@ def test_M85028_0680_delete_model_cancel(
     page = ai_classification_page
     before_count = len(page.model_items())
 
-    page.click_model_menu(-1, "删除")
-    message_box = MessageBoxPage.wait_for_open(
-        page.handle,
-        timeout=page.timeout,
-    )
+    message_box = page.open_delete_model_dialog(-1)
     assert "确认删除" in message_box.message()
     message_box.cancel()
 
@@ -169,26 +172,6 @@ def test_ai_classification_core_controls(
     assert page.judgment_combo().is_visible()
     assert page.single_capture_button().is_visible()
     assert page.continuous_capture_checkbox().is_visible()
-
-
-def test_M85028_0700_open_target_region_editor(
-    ai_classification_page: AiClassificationConfigPage,
-) -> None:
-    """点击编辑后进入目标区域页面，取消后返回默认配置页。"""
-    page = ai_classification_page
-    editor = page.open_target_region_editor()
-
-    try:
-        assert editor.rectangle_button().is_visible()
-        assert editor.circle_button().is_visible()
-        assert editor.mask_region_button().is_visible()
-        assert editor.save_button().is_visible()
-        assert editor.cancel_button().is_visible()
-    finally:
-        editor.cancel()
-
-    assert page.target_region_edit_button().is_visible()
-
 
 def test_create_named_copy_from_any_model(
     ai_classification_page: AiClassificationConfigPage,
@@ -220,12 +203,7 @@ def test_create_named_copy_from_any_model(
         assert page.model_item(-1).is_visible()
     finally:
         if created:
-            page.click_model_menu(-1, "删除")
-            message_box = MessageBoxPage.wait_for_open(
-                page.handle,
-                timeout=page.timeout,
-            )
-            message_box.confirm()
+            page.open_delete_model_dialog(-1).confirm()
 
             deadline = time.monotonic() + page.timeout
             while time.monotonic() < deadline:
@@ -234,3 +212,66 @@ def test_create_named_copy_from_any_model(
                 time.sleep(0.2)
 
             assert page.model_count() == original_count
+
+def test_M85028_0700_open_target_region_editor(
+    ai_classification_page: AiClassificationConfigPage,
+) -> None:
+    """点击编辑后进入目标区域页面，取消后返回默认配置页。"""
+    page = ai_classification_page
+    editor = page.open_target_region_editor()
+
+    try:
+        assert editor.rectangle_button().is_visible()
+        assert editor.circle_button().is_visible()
+        assert editor.mask_region_button().is_visible()
+        assert editor.save_button().is_visible()
+        assert editor.cancel_button().is_visible()
+    finally:
+        editor.cancel()
+
+    assert page.target_region_edit_button().is_visible()
+
+
+
+
+def test_M85028_0701_open_advanced_settings(
+    ai_classification_page: AiClassificationConfigPage,
+) -> None:
+    """点击编辑后，设置矩形目标区域。"""
+    page = ai_classification_page
+    editor = page.open_target_region_editor()
+    try:
+        rectangle_button = editor.rectangle_button()
+        assert rectangle_button.is_visible()
+        if rectangle_button.get_toggle_state() == 0:
+            rectangle_button.click_input()
+
+        start = (700, 260)
+        end = (1700, 1100)
+        mouse.move(coords=start)
+        mouse.press(button="left", coords=start)
+        time.sleep(0.2)
+        mouse.move(coords=end)
+        time.sleep(0.2)
+        mouse.release(button="left", coords=end)
+        time.sleep(0.3)
+
+        screenshot = page.window.capture_as_image()
+        screenshot.save("rectangle_region.png")
+
+        save_button = editor.save_button()
+        assert save_button.is_enabled()
+        save_button.click_input()
+        assert page.target_region_edit_button().is_visible()
+    except Exception:
+        editor.cancel()
+        raise
+
+
+# def test_M85028_0702_train_model(
+#     ai_classification_page: AiClassificationConfigPage,
+# ) -> None:
+#     """点击标注图像按钮，模型训练成功。"""
+#     page = ai_classification_page
+#     if page.target_region_edit_button().text() == "编辑":
+

@@ -409,11 +409,19 @@ class ProjectListPage:
 
     def project_names(self) -> list[str]:
         """返回当前工程树中的所有工程名称（自动去除未保存星号前缀）。"""
+        raw_texts = [
+            item.window_text().strip()
+            for item in self.tree_items(named_only=True)
+        ]
+        if not raw_texts:
+            return []
+
         names: list[str] = []
-        for item in self.tree_items(named_only=True):
-            text = item.window_text().strip().lstrip("*")
-            if text.startswith("工程"):
-                names.append(text)
+        for text in raw_texts[1:]:
+            cleaned = text.lstrip("*")
+            if cleaned.isdigit():
+                continue
+            names.append(cleaned)
         return names
 
     def item(self, title: str):
@@ -476,3 +484,18 @@ class ProjectListPage:
             self.main_window.handle,
             timeout=timeout,
         )
+
+    def rename_project(
+        self,
+        old_name: str,
+        new_name: str,
+        timeout: float = 5,
+    ) -> None:
+        """右键点击工程并选择“重命名工程”，输入新名称并按回车确认。"""
+        project_menu = self.open_project_menu(old_name, timeout=timeout)
+        project_menu.click_item("重命名工程")
+        time.sleep(0.2)
+        keyboard.send_keys("^a{BACKSPACE}")
+        keyboard.send_keys(new_name, with_spaces=True)
+        keyboard.send_keys("{ENTER}")
+        time.sleep(0.3)

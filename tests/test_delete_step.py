@@ -9,10 +9,10 @@ import win32con  # pyright: ignore[reportMissingModuleSource]
 import win32gui  # pyright: ignore[reportMissingModuleSource]
 from pywinauto import mouse
 
-from pages.context_menu_page import ContextMenuPage
 from pages.main_window_page import MainWindowPage
+from pages.project_editor_page import StepContextMenu
 from services import VisionSdkClient
-from tests.test_create_step import STEP_NAME
+from tests.step_library.test_create_steps import STEP_NAME
 from utils.image_locator import (
     TEMPLATE_DIR,
     capture_window,
@@ -77,9 +77,7 @@ def delete_by_context_menu(match) -> None:
         match.top + int(match.height * 0.5),
     )
     mouse.click(button="right", coords=point)
-    context_menu = ContextMenuPage.wait_for_open(main_hwnd)
-    preview = context_menu.save_item_preview("删除", DELETE_MENU_PREVIEW)
-    print(f"删除菜单项定位截图：{preview}")
+    context_menu = StepContextMenu.wait_for_open(main_hwnd)
     context_menu.delete()
     print("已通过右键菜单删除")
     time.sleep(2)

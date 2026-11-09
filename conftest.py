@@ -1,16 +1,34 @@
 # coding: utf-8
 """Mech-Vision UI 测试的 pytest 公共夹具。"""
 
+import time
 import pytest
-import win32con  # pyright: ignore[reportMissingModuleSource]
-import win32gui  # pyright: ignore[reportMissingModuleSource]
 from pages.main_window_page import MainWindowPage
 from pages.welcome_page import WelcomePage
 from pywinauto import Application
-from run import wait_for_main_window
-from utils.mech_vision_app import MechVisionApp
+from utils.mech_vision_app import EXE_PATH, MechVisionApp
+from pywinauto.application import ProcessNotFoundError
 
-
+def wait_for_main_window(timeout: float = 60) -> int:
+    """用 Win32 Application 等待主窗口并返回句柄。"""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            app = Application(backend="win32").connect(
+                path=str(EXE_PATH),
+                timeout=2,
+            )
+            window = app.window(
+                title="Mech-Vision",
+                class_name="Qt5152QWindowIcon",
+                top_level_only=True,
+            )
+            if window.exists(timeout=2) and window.is_visible():
+                return window.handle
+        except ProcessNotFoundError:
+            pass
+        time.sleep(0.2)
+    raise TimeoutError(f"{timeout} 秒内未找到 Mech-Vision 主窗口")
 
 
 @pytest.fixture(scope="session")

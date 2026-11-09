@@ -8,12 +8,82 @@ import time
 import win32gui
 from pywinauto import Application, keyboard
 
-from pages.message_box_page import MessageBoxPage
 from utils.window_helper import (
     process_id_from_window,
     visible_process_windows,
     wait_window_closed,
 )
+
+
+class DeleteModelDialog:
+    """封装右键模型点击“删除”后弹出的确认弹窗。"""
+
+    MESSAGE_BOX_CLASS = "mmind::StyledMessageBox"
+
+    def __init__(self, window, timeout: float = 10) -> None:
+        self.window = window
+        self.timeout = timeout
+
+    @classmethod
+    def wait_for_open(
+        cls,
+        reference_hwnd: int,
+        timeout: float = 10,
+    ) -> "DeleteModelDialog":
+        """等待同一进程中的模型删除确认弹窗出现。"""
+        process_id = process_id_from_window(reference_hwnd)
+        deadline = time.monotonic() + timeout
+
+        while time.monotonic() < deadline:
+            for hwnd in visible_process_windows(process_id):
+                app = Application(backend="uia").connect(handle=hwnd)
+                window = app.window(handle=hwnd)
+                if (
+                    window.exists(timeout=0.2)
+                    and window.element_info.class_name
+                    == cls.MESSAGE_BOX_CLASS
+                ):
+                    return cls(window, timeout)
+            time.sleep(0.1)
+
+        raise TimeoutError("未出现模型删除确认弹窗")
+
+    @property
+    def handle(self) -> int:
+        """返回确认框原生句柄。"""
+        return self.window.handle
+
+    def message(self) -> str:
+        """读取确认框中的可见提示文本。"""
+        texts = [
+            control.window_text().strip()
+            for control in self.window.descendants(control_type="Text")
+            if control.is_visible() and control.window_text().strip()
+        ]
+        return "\n".join(dict.fromkeys(texts))
+
+    def button(self, *titles: str):
+        """按候选标题定位按钮。"""
+        for title in titles:
+            button = self.window.child_window(
+                title=title,
+                control_type="Button",
+            )
+            if button.exists(timeout=0.2):
+                return button
+        raise RuntimeError(f"确认弹窗中未找到按钮：{titles!r}")
+
+    def confirm(self) -> None:
+        """点击确认/是/删除按钮并等待弹窗关闭。"""
+        hwnd = self.handle
+        self.button("确定", "是", "是(Y)", "删除").click_input()
+        wait_window_closed(hwnd, self.timeout)
+
+    def cancel(self) -> None:
+        """点击取消/否按钮并等待弹窗关闭。"""
+        hwnd = self.handle
+        self.button("取消", "否", "否(N)").click_input()
+        wait_window_closed(hwnd, self.timeout)
 
 
 class AiClassificationTargetRegionEditorPanel:
@@ -371,6 +441,15 @@ class AiClassificationConfigPage:
         """定位“设置目标区域”下的编辑按钮。"""
         return self.config_control("Button", title="编辑")
 
+    def target_region_text(self):
+        """通过“设置目标区域”的父节点，定位状态文本控件（如“未设置”/“已设置”）。"""
+        groupbox = self.config_control("Text", title="设置目标区域").parent()
+        for child in groupbox.children(control_type="Text"):
+            text = child.window_text().strip()
+            if child.is_visible() and text and text != "设置目标区域":
+                return child
+        raise RuntimeError("未在“设置目标区域”父节点下找到状态文本控件")
+
     def confidence_spinner(self):
         """定位置信度阈值输入框。"""
         return self.config_control("Spinner")
@@ -430,6 +509,17 @@ class AiClassificationConfigPage:
                     return
             time.sleep(0.1)
         raise TimeoutError(f"模型右键菜单中未找到：{menu_title!r}")
+
+    def open_delete_model_dialog(
+        self,
+        model_index: int = -1,
+    ) -> DeleteModelDialog:
+        """右键点击指定模型并点击“删除”，返回模型删除确认弹窗对象。"""
+        self.click_model_menu(model_index, "删除")
+        return DeleteModelDialog.wait_for_open(
+            self.handle,
+            timeout=self.timeout,
+        )
 
     
     def category_panel(self, category: str):
