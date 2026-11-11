@@ -19,6 +19,13 @@ def test_M85028_0673_model_list_is_visible(
     assert page.model_list().is_visible()
     assert len(page.model_items()) >= 1
 
+def test_M85028_0673_model_list_is_visible(
+    ai_classification_page: AiClassificationConfigPage,
+) -> None:
+    """默认存在的模型是未完成，且推理结果是未知，设置目标区域也是未设置"""
+    page = ai_classification_page
+    assert page.first_model_name() == "未完成"
+
 
 def test_M85028_0674_create_model(
     ai_classification_page: AiClassificationConfigPage,

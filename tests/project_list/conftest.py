@@ -20,7 +20,6 @@ from utils.image_locator import (
     locate_template,
     press_delete,
 )
-from utils.window_helper import set_per_monitor_dpi_awareness
 
 
 SOLUTION_PATH = Path(
@@ -168,7 +167,6 @@ def delete_project_step_by_context_menu(
         threshold=0.8,
         timeout=15,
     )
-    set_per_monitor_dpi_awareness()
     point = (
         match.left + int(match.width * 0.25),
         match.top + int(match.height * 0.5),

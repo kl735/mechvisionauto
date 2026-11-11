@@ -10,14 +10,14 @@ import win32gui  # pyright: ignore[reportMissingModuleSource]
 import win32process  # pyright: ignore[reportMissingModuleSource]
 
 
-def set_per_monitor_dpi_awareness() -> None:
-    """使用真实屏幕坐标，避免多显示器缩放造成鼠标点击偏移。"""
-    try:
-        ctypes.windll.user32.SetThreadDpiAwarenessContext(
-            ctypes.c_void_p(-4),
-        )
-    except (AttributeError, OSError):
-        ctypes.windll.user32.SetProcessDPIAware()
+# def set_per_monitor_dpi_awareness() -> None:
+#     """使用真实屏幕坐标，避免多显示器缩放造成鼠标点击偏移。"""
+#     try:
+#         ctypes.windll.user32.SetThreadDpiAwarenessContext(
+#             ctypes.c_void_p(-4),
+#         )
+#     except (AttributeError, OSError):
+#         ctypes.windll.user32.SetProcessDPIAware()
 
 
 def process_id_from_window(hwnd: int) -> int:

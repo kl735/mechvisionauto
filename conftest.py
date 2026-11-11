@@ -55,8 +55,21 @@ def main_page(mech_app) -> MainWindowPage:
         try:
             main_handle = wait_for_main_window(timeout=5)
         except TimeoutError:
-            welcome.create_empty_solution_button().invoke()
+            try:
+                welcome = WelcomePage.attach(mech_app.app, timeout=3)
+                welcome.create_empty_solution_button().invoke()
+            except Exception:
+                pass
             main_handle = wait_for_main_window(timeout=60)
 
     mech_app.app = Application(backend="win32").connect(handle=main_handle)
     return MainWindowPage.attach(main_handle, timeout=60)
+
+
+@pytest.fixture
+def welcome_page(mech_app) -> WelcomePage:
+    """提供已进入欢迎页的 Mech-Vision 欢迎页 Page。"""
+    if mech_app.app is None:
+        raise RuntimeError("Mech-Vision 尚未启动")
+    page = WelcomePage.attach(mech_app.app, timeout=30)
+    return page

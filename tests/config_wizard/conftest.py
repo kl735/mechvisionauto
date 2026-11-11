@@ -11,12 +11,11 @@ import time
 import pytest
 import win32con  # pyright: ignore[reportMissingModuleSource]
 import win32gui  # pyright: ignore[reportMissingModuleSource]
-from pywinauto import mouse
 
 from pages.ai_classification_config_page import AiClassificationConfigPage
 from pages.main_window_page import MainWindowPage
 from services import VisionSdkClient
-from utils.window_helper import set_per_monitor_dpi_awareness
+from utils.image_locator import TEMPLATE_DIR, click_match, locate_template
 
 
 DEFAULT_SOLUTION_PATH = Path(
@@ -28,6 +27,7 @@ SOLUTION_PATH = Path(
 )
 PROJECT_NAME = "工程1"
 STEP_NAME = "AI分类（正反/有无）_1"
+STEP_TITLE_TEMPLATE = TEMPLATE_DIR / "ai_classify_title.png"
 
 
 def _open_solution(solution_path: Path) -> None:
@@ -55,38 +55,23 @@ def _open_solution(solution_path: Path) -> None:
 
 
 def _open_config_wizard(main_page: MainWindowPage) -> None:
-    """选中目标 Step，并从步骤参数区域打开配置向导。"""
-    set_per_monitor_dpi_awareness()
-    win32gui.ShowWindow(main_page.handle, win32con.SW_RESTORE)
-    win32gui.SetWindowPos(
-        main_page.handle,
-        win32con.HWND_TOP,
-        0,
-        0,
-        1600,
-        1000,
-        win32con.SWP_SHOWWINDOW,
-    )
-    main_page.focus()
+    """图像匹配选中目标 Step，并通过 UIA 从步骤参数区域打开配置向导。"""
     win32gui.ShowWindow(main_page.handle, win32con.SW_MAXIMIZE)
-    time.sleep(1)
+    time.sleep(0.5)
+    main_page.focus()
     main_page.project_list.select(PROJECT_NAME)
 
-    left, top, right, bottom = win32gui.GetWindowRect(main_page.handle)
-    width = right - left
-    height = bottom - top
-    step_point = (
-        left + round(width * 0.42),
-        top + round(height * 0.67),
+    match, _screenshot, _origin = locate_template(
+        STEP_TITLE_TEMPLATE,
+        threshold=0.8,
+        timeout=15,
+        hwnd=main_page.handle,
+        scales=(0.75, 0.9, 1.0, 1.1, 1.25, 1.5),
     )
-    mouse.click(coords=step_point)
-    time.sleep(0.8)
+    click_match(match, offset=(0.25, 0.5))
+    time.sleep(0.5)
 
-    wizard_button_point = (
-        left + round(width * 0.93),
-        top + round(height * 0.73),
-    )
-    mouse.click(coords=wizard_button_point)
+    main_page.open_config_wizard()
 
 
 @pytest.fixture(scope="session")
@@ -120,7 +105,6 @@ def ai_classification_page(
             main_page.handle,
             timeout=30,
         )
-    set_per_monitor_dpi_awareness()
     win32gui.ShowWindow(page.handle, win32con.SW_RESTORE)
     win32gui.SetWindowPos(
         page.handle,
