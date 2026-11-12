@@ -18,13 +18,27 @@ def wait_for_main_window(timeout: float = 60) -> int:
                 path=str(EXE_PATH),
                 timeout=2,
             )
-            window = app.window(
+            windows = app.windows(
                 title="Mech-Vision",
                 class_name="Qt5152QWindowIcon",
                 top_level_only=True,
             )
-            if window.exists(timeout=2) and window.is_visible():
-                return window.handle
+            for window in windows:
+                if not window.is_visible():
+                    continue
+                try:
+                    uia_window = Application(
+                        backend="uia",
+                    ).connect(
+                        handle=window.handle,
+                    ).window(handle=window.handle)
+                    if (
+                        uia_window.element_info.automation_id
+                        == "mainWindow"
+                    ):
+                        return window.handle
+                except Exception:
+                    continue
         except ProcessNotFoundError:
             pass
         time.sleep(0.2)
