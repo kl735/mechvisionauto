@@ -395,7 +395,7 @@ class ProjectListPage:
         return buttons[-1]
 
     def tree_items(self, named_only: bool = False) -> list:
-        """返回工程树中的节点，可选择过滤无名称占位节点。"""
+        """返回工程列表下的工程树中的节点"""
         items = self.tree().wrapper_object().descendants(
             control_type="TreeItem",
         )
@@ -406,6 +406,13 @@ class ProjectListPage:
                 if item.window_text().strip()
             ]
         return items
+        
+    def solution_name(self) -> str:
+        """返回当前工程树中的方案名称。"""
+        items = self.tree_items(named_only=True)
+        if not items:
+            raise RuntimeError("工程树中未找到方案节点")
+        return items[0].window_text().strip().lstrip("*")
 
     def project_names(self) -> list[str]:
         """返回当前工程树中的所有工程名称（自动去除未保存星号前缀）。"""

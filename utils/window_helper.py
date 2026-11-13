@@ -53,7 +53,7 @@ def wait_window_closed(hwnd: int, timeout: float = 10) -> None:
     raise TimeoutError(f"窗口未在 {timeout} 秒内关闭：handle={hwnd}")
 
 
-def wait_window_hidden(hwnd: int, timeout: float = 10) -> None:
+def wait_window_hidden(hwnd: int, timeout: float = 10) -> bool:
     """等待原生窗口隐藏或销毁。"""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -61,6 +61,6 @@ def wait_window_hidden(hwnd: int, timeout: float = 10) -> None:
             not win32gui.IsWindow(hwnd)
             or not win32gui.IsWindowVisible(hwnd)
         ):
-            return
+            return True
         time.sleep(0.1)
-    raise TimeoutError(f"窗口未在 {timeout} 秒内隐藏：handle={hwnd}")
+    raise TimeoutError(f"窗口未在 {timeout} 秒内隐藏：handle={hwnd}")   

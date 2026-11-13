@@ -2,6 +2,7 @@
 """Mech-Vision 的启动和关闭。"""
 
 from pathlib import Path
+import time
 
 from pywinauto import Application
 from pywinauto.application import ProcessNotFoundError
@@ -10,6 +11,42 @@ from pywinauto.application import ProcessNotFoundError
 EXE_PATH = Path(
     r"D:\project\Mech-Vision & Mech-Viz-2.2.2-dev-10-27\Mech-Vision\mmind_vision.exe"
 )
+
+
+def wait_for_main_window(timeout: float = 60) -> int:
+    """等待可见的 Mech-Vision UIA 主窗口并返回原生句柄。"""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            app = Application(backend="win32").connect(
+                path=str(EXE_PATH),
+                timeout=2,
+            )
+            windows = app.windows(
+                title="Mech-Vision",
+                class_name="Qt5152QWindowIcon",
+                top_level_only=True,
+            )
+            for window in windows:
+                if not window.is_visible():
+                    continue
+                try:
+                    uia_window = Application(
+                        backend="uia",
+                    ).connect(
+                        handle=window.handle,
+                    ).window(handle=window.handle)
+                    if (
+                        uia_window.element_info.automation_id
+                        == "mainWindow"
+                    ):
+                        return window.handle
+                except Exception:
+                    continue
+        except ProcessNotFoundError:
+            pass
+        time.sleep(0.2)
+    raise TimeoutError(f"{timeout} 秒内未找到 Mech-Vision 主窗口")
 
 
 class MechVisionApp:
