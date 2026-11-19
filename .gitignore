@@ -2,3 +2,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 vision_sdk_log/
+.cursor/
+allure-report/
+allure-results/
+artifacts/

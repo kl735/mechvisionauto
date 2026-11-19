@@ -17,6 +17,14 @@ def mech_app():
     finally:
         app.close()
 
+@pytest.fixture
+def welcome_page(mech_app) -> WelcomePage:
+    """提供已进入欢迎页的 Mech-Vision 欢迎页 Page。"""
+    if mech_app.app is None:
+        raise RuntimeError("Mech-Vision 尚未启动")
+    page = WelcomePage.attach(mech_app.app, timeout=30)
+    return page
+
 
 @pytest.fixture(scope="session")
 def main_page(mech_app) -> MainWindowPage:
@@ -42,11 +50,3 @@ def main_page(mech_app) -> MainWindowPage:
     mech_app.app = Application(backend="win32").connect(handle=main_handle)
     return MainWindowPage.attach(main_handle, timeout=60)
 
-
-@pytest.fixture
-def welcome_page(mech_app) -> WelcomePage:
-    """提供已进入欢迎页的 Mech-Vision 欢迎页 Page。"""
-    if mech_app.app is None:
-        raise RuntimeError("Mech-Vision 尚未启动")
-    page = WelcomePage.attach(mech_app.app, timeout=30)
-    return page

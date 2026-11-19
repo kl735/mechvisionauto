@@ -6,9 +6,10 @@ from __future__ import annotations
 import time
 
 from pywinauto import Application
-from pywinauto.mouse import keyboard
+from pywinauto.mouse import click, keyboard, scroll
 from pywinauto.timings import wait_until
 
+from utils.solution_library_resources import count_online_resources
 from utils.window_helper import (
     process_id_from_window,
     visible_process_windows,
@@ -86,16 +87,169 @@ class InvalidSolutionDialog:
         button.wait("exists visible enabled", timeout=self.timeout)
         return button
 
+    # def named_buttons(self) -> list[str]:
+    #     """返回所有有名称的可见按钮。"""
+    #     return [
+    #         button.window_text().strip()
+    #         for button in self.window.descendants(control_type="Button")
+    #         if button.is_visible() and button.window_text().strip()
+    #     ]
+
+    def confirm(self) -> None:
+        """点击“确定”并等待提示框关闭。"""
+        hwnd = self.window.handle
+        self.confirm_button().invoke()
+        wait_window_hidden(hwnd, timeout=self.timeout)
+
+
+class DownloadConfirmDialog:
+    """封装案例库下载资源时的确认提示框。"""
+
+    MESSAGE_BOX_CLASSES = {
+        "mmind::StyledMessageBox",
+        "#32770",
+    }
+    YES_TITLES = ("确定", "是(Y)", "是(&Y)", "是", "Yes", "Yes(Y)")
+
+    def __init__(self, window, timeout: float = 10) -> None:
+        self.window = window
+        self.timeout = timeout
+
+    @classmethod
+    def wait_for_open(
+        cls,
+        reference_hwnd: int,
+        timeout: float = 10,
+    ) -> "DownloadConfirmDialog":
+        """等待同一进程中的下载确认框出现。"""
+        process_id = process_id_from_window(reference_hwnd)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            for hwnd in visible_process_windows(process_id):
+                if hwnd == reference_hwnd:
+                    continue
+                try:
+                    app = Application(backend="uia").connect(handle=hwnd)
+                    window = app.window(handle=hwnd)
+                    info = window.element_info
+                    dialog = cls(window, timeout=10)
+                    class_name = info.class_name or ""
+                    if (
+                        class_name in cls.MESSAGE_BOX_CLASSES
+                        or "MessageBox" in class_name
+                        or dialog.yes_button_control() is not None
+                    ):
+                        if dialog.yes_button_control() is not None:
+                            return dialog
+                except Exception:
+                    continue
+            time.sleep(0.1)
+        raise TimeoutError("未出现案例库下载确认框")
+
+    def yes_button_control(self):
+        """定位“是”或“确定”按钮，找不到时返回 None。"""
+        try:
+            buttons = self.window.descendants(control_type="Button")
+        except Exception:
+            return None
+        for button in buttons:
+            title = button.window_text().strip()
+            if (
+                title in self.YES_TITLES
+                or title.startswith("是")
+                or title.lower().startswith("yes")
+            ):
+                return button
+        return None
+
     def named_buttons(self) -> list[str]:
-        """返回所有有名称的可见按钮。"""
+        """返回确认框中可见按钮的标题。"""
         return [
             button.window_text().strip()
             for button in self.window.descendants(control_type="Button")
             if button.is_visible() and button.window_text().strip()
         ]
 
+    def cancel_button(self):
+        """定位“取消”按钮，找不到时返回 None。"""
+        try:
+            buttons = self.window.descendants(control_type="Button")
+        except Exception:
+            return None
+        for button in buttons:
+            title = button.window_text().strip()
+            if title in ("取消", "取消(N)", "取消(&N)", "Cancel") or title.startswith("取消"):
+                return button
+        return None
+
     def confirm(self) -> None:
-        """点击“确定”并等待提示框关闭。"""
+        """点击“是”并等待确认框关闭。"""
+        button = self.yes_button_control()
+        if button is None:
+            raise LookupError("下载确认框中未找到“是”按钮")
+        hwnd = self.window.handle
+        self.window.set_focus()
+        button.invoke()
+        wait_window_hidden(hwnd, timeout=self.timeout)
+
+
+class LatestLibraryResourceDialog:
+    """封装“当前已是最新案例库资源”提示框。"""
+
+    MESSAGE_BOX_CLASS = "mmind::StyledMessageBox"
+    EXPECTED_TEXT = "当前已是最新案例库资源"
+
+    def __init__(self, window, timeout: float = 10) -> None:
+        self.window = window
+        self.timeout = timeout
+
+    @classmethod
+    def wait_for_open(
+        cls,
+        reference_hwnd: int,
+        timeout: float = 10,
+    ) -> "LatestLibraryResourceDialog":
+        """等待同一进程中的“已是最新资源”提示框。"""
+        process_id = process_id_from_window(reference_hwnd)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            for hwnd in visible_process_windows(process_id):
+                if hwnd == reference_hwnd:
+                    continue
+                try:
+                    app = Application(backend="uia").connect(handle=hwnd)
+                    window = app.window(handle=hwnd)
+                    info = window.element_info
+                    if info.class_name != cls.MESSAGE_BOX_CLASS:
+                        continue
+                    dialog = cls(window, timeout)
+                    if cls.EXPECTED_TEXT in dialog.message_text():
+                        return dialog
+                except Exception:
+                    continue
+            time.sleep(0.1)
+        raise TimeoutError("未出现“当前已是最新案例库资源”提示框")
+
+    def message_text(self) -> str:
+        """读取提示框文本。"""
+        texts = [
+            control.window_text().strip()
+            for control in self.window.descendants(control_type="Text")
+            if control.is_visible() and control.window_text().strip()
+        ]
+        return "\n".join(dict.fromkeys(texts))
+
+    def confirm_button(self):
+        """定位“确定”按钮。"""
+        button = self.window.child_window(
+            title="确定",
+            control_type="Button",
+        )
+        button.wait("exists visible enabled", timeout=self.timeout)
+        return button
+
+    def confirm(self) -> None:
+        """点击确定并等待提示框关闭。"""
         hwnd = self.window.handle
         self.confirm_button().invoke()
         wait_window_hidden(hwnd, timeout=self.timeout)
@@ -236,16 +390,19 @@ class RecentUsePanel:
         )
 
     def _select_switch(self, control) -> None:
-        """通过 UIA Toggle 模式选择最近使用类型。"""
+        """触发按钮点击并等待最近使用类型切换完成。"""
         control.wait(
             "exists visible enabled ready",
             timeout=self.page.timeout,
         )
+        self.page.main_window.set_focus()
         wrapper = control.wrapper_object()
         if bool(wrapper.is_selected()):
             return
 
-        wrapper.toggle()
+        wrapper.invoke()
+        point = wrapper.rectangle().mid_point()
+        click(button="left", coords=(point.x, point.y))
         wait_until(
             timeout=5,
             retry_interval=0.1,
@@ -272,7 +429,19 @@ class RecentUsePanel:
             "RadioButton",
             "工程",
         )
-
+    def column_headers(self) -> list[str]:
+        """返回最近使用表头文字。"""
+        header = self.page._control(
+            f"{RECENT_PREFIX}.headerTableWidget",
+            "Table",
+        )
+        header.wait("exists", timeout=self.page.timeout)
+        return [
+            item.window_text().strip()
+            for item in header.descendants(control_type="DataItem")
+            if item.window_text().strip()
+        ]
+        
     def show_projects(self) -> None:
         """切换到最近使用的工程列表。"""
         self._select_switch(self.project_switch())
@@ -289,6 +458,20 @@ class RecentUsePanel:
             f"{RECENT_PREFIX}.recentUseTableWidget",
             "Table",
         )
+
+    def titles(self) -> list[str]:
+        """返回最近使用列表中的文档标题。"""
+        table = self.table()
+        table.wait("exists", timeout=self.page.timeout)
+        items = table.descendants(control_type="DataItem")
+        names = []
+        for index, item in enumerate(items):
+            if index % 3 != 0:
+                continue
+            text = item.window_text().strip()
+            if text:
+                names.append(text)
+        return names
 
     def item(self, name: str, found_index: int = 0):
         """按名称定位最近使用条目。"""
@@ -312,6 +495,31 @@ class SolutionLibraryPanel:
 
     def __init__(self, page: WelcomePage) -> None:
         self.page = page
+    @classmethod
+    def wait_for_open(cls, reference_hwnd: int, timeout: float = 10) -> "SolutionLibraryPanel":
+        process_id = process_id_from_window(reference_hwnd)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            for hwnd in visible_process_windows(process_id):
+                if hwnd == reference_hwnd:
+                    continue
+                try:
+                    app = Application(backend="uia").connect(handle=hwnd)
+                    window = app.window(handle=hwnd)
+                    info = window.element_info
+                    if (
+                        info.class_name != "mmind::TypicalProjectDlg"
+                        or info.automation_id != "mmind__TypicalProjectDlg"
+                        or info.name != "欢迎使用Mech-Vision"
+                    ):
+                        continue
+                    library = cls(WelcomePage(window, timeout))
+                    if library.is_open():
+                        return library
+                except Exception:
+                    continue
+            time.sleep(0.1)
+        raise TimeoutError("未出现案例库页面")
 
     def root(self):
         """定位案例库页面根容器。"""
@@ -362,12 +570,180 @@ class SolutionLibraryPanel:
             "Edit",
         )
 
+    def search(self, keyword: str) -> None:
+        """在案例库搜索框中输入关键字。"""
+        edit = self.search_edit()
+        edit.wait(
+            "exists visible enabled ready",
+            timeout=self.page.timeout,
+        )
+        self.page.main_window.set_focus()
+        edit.set_edit_text(keyword)
+
+    def clear_search(self) -> None:
+        """清空案例库搜索框。"""
+        self.search("")
+
     def download_button(self):
         """定位右上角下载案例按钮。"""
         return self.page._control(
             f"{TEMPLATE_PREFIX}.pushButton_download",
             "Button",
         )
+
+    def click_download(self) -> None:
+        """点击右上角下载按钮，不处理随后弹出的确认框。"""
+        button = self.download_button()
+        button.wait(
+            "exists visible enabled ready",
+            timeout=self.page.timeout,
+        )
+        self.page.main_window.set_focus()
+        button.invoke()
+
+    def wait_until_download_complete(self, timeout: float = 180) -> None:
+        """等待 online 资源落地且界面出现卡片。"""
+        deadline = time.monotonic() + timeout
+        last_count = -1
+        stable_since: float | None = None
+        while time.monotonic() < deadline:
+            resource_count = count_online_resources()
+            try:
+                card_count = len(self.card_items())
+            except Exception:
+                card_count = 0
+            if resource_count > 0 and card_count > 0:
+                if resource_count == last_count:
+                    if stable_since is None:
+                        stable_since = time.monotonic()
+                    elif time.monotonic() - stable_since >= 2:
+                        return
+                else:
+                    stable_since = None
+                last_count = resource_count
+            else:
+                last_count = resource_count
+                stable_since = None
+            time.sleep(0.5)
+        raise TimeoutError(
+            f"{timeout} 秒内案例库资源未下载完成："
+            f"online={count_online_resources()}，"
+            f"卡片={len(self.card_items()) if self.card_list().exists(timeout=1) else 0}"
+        )
+
+    def download_online_resources(self, timeout: float = 180) -> None:
+        """点击下载、确认提示，并等待资源落地且界面刷新。"""
+        button = self.download_button()
+        button.wait(
+            "exists visible enabled ready",
+            timeout=self.page.timeout,
+        )
+        self.page.main_window.set_focus()
+        button.invoke()
+        DownloadConfirmDialog.wait_for_open(
+            self.page.main_window.handle,
+        ).confirm()
+
+        deadline = time.monotonic() + timeout
+        last_count = -1
+        stable_since: float | None = None
+        while time.monotonic() < deadline:
+            resource_count = count_online_resources()
+            try:
+                card_count = len(self.card_items())
+            except Exception:
+                card_count = 0
+            if resource_count > 0 and card_count > 0:
+                if resource_count == last_count:
+                    if stable_since is None:
+                        stable_since = time.monotonic()
+                    elif time.monotonic() - stable_since >= 2:
+                        return
+                else:
+                    stable_since = None
+                last_count = resource_count
+            else:
+                last_count = resource_count
+                stable_since = None
+            time.sleep(0.5)
+        raise TimeoutError(
+            f"{timeout} 秒内案例库资源未下载完成："
+            f"online={count_online_resources()}，"
+            f"卡片={len(self.card_items()) if self.card_list().exists(timeout=1) else 0}"
+        )
+    
+
+    # def _fully_visible_card_items(self) -> list:
+    #     items = self.card_items()
+    #     if not items:
+    #         return []
+    #     list_rect = self.card_list().wrapper_object().rectangle()
+    #     full_height = max(item.rectangle().height() for item in items)
+    #     visible = []
+    #     for item in items:
+    #         rect = item.rectangle()
+    #         if rect.top < list_rect.top - 1:
+    #             continue
+    #         if rect.bottom > list_rect.bottom + 1:
+    #             continue
+    #         if full_height and rect.height() < full_height * 0.9:
+    #             continue
+    #         visible.append(item)
+    #     return visible or items[:1]
+
+    # def _select_card_control(self, card, previous: str = "") -> str:
+    #     self.page.main_window.set_focus()
+    #     card.click_input()
+    #     return self._wait_solution_name(previous, timeout=3)
+
+    # def _wait_solution_name(self, previous: str, timeout: float) -> str:
+    #     deadline = time.monotonic() + timeout
+    #     current = previous
+    #     while time.monotonic() < deadline:
+    #         try:
+    #             current = self.selected_solution_name()
+    #         except Exception:
+    #             current = previous
+    #         if current and (not previous or current != previous):
+    #             return current
+    #         time.sleep(0.1)
+    #     try:
+    #         return self.selected_solution_name() or previous
+    #     except Exception:
+    #         return previous
+
+    # def _wheel_card_list(self, down: bool, card=None) -> None:
+    #     target = card or (self._fully_visible_card_items() or [None])[-1]
+    #     if target is None:
+    #         return
+    #     rect = target.rectangle()
+    #     scroll(
+    #         coords=(
+    #             (rect.left + rect.right) // 2,
+    #             (rect.top + rect.bottom) // 2,
+    #         ),
+    #         wheel_dist=-4 if down else 4,
+    #     )
+    #     time.sleep(0.2)
+
+    def tab_titles(self) -> list[str]:
+        """当前分类栏中可见的一级，按界面顺序去重。"""
+        titles: list[str] = []
+        seen: set[str] = set()
+        for control in self.category_group().wrapper_object().descendants(
+            control_type="Text",
+        ):
+            try:
+                if not control.is_visible():
+                    continue
+            except Exception:
+                continue
+            text = (control.window_text() or "").strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            titles.append(text)
+        return titles
 
     def category_group(self):
         """定位分类标签区域（包含一级分类与动态出现的二级分类）。"""
@@ -386,6 +762,29 @@ class SolutionLibraryPanel:
         )
         tab.wait("exists visible", timeout=self.page.timeout)
         return tab
+
+    def has_subcategory(self, title: str) -> bool:
+        """当前分类区域是否出现指定二级分类。"""
+        return self.category_group().child_window(
+            title=title,
+            control_type="Text",
+        ).exists(timeout=1)
+
+    def is_application_templates_selected(self) -> bool:
+        """当前是否停留在“应用模板”一级分类。"""
+        tab = self.category_tab("应用模板")
+        wrapper = tab.wrapper_object()
+        parent = wrapper.parent()
+        try:
+            if bool(parent.is_selected()):
+                return True
+        except Exception:
+            pass
+        return (
+            tab.is_visible()
+            and not self.has_subcategory("预处理")
+            and not self.has_subcategory("有序工件拣选")
+        )
 
     def select_category(
         self,
@@ -432,9 +831,51 @@ class SolutionLibraryPanel:
 
     def card_items(self) -> list:
         """返回当前分类下的所有案例卡片 ListItem 列表。"""
+        items = []
+        for child in self.card_list().wrapper_object().children():
+            if child.element_info.control_type == "ListItem":
+                items.append(child)
+        if items:
+            return items
+
         return self.card_list().wrapper_object().descendants(
             control_type="ListItem",
         )
+    def card_names(self) -> list[str]:
+        """读出当前分类下全部方案名称。"""
+        items = self.card_items()
+        if not items:
+            return []
+
+        item = items[0]
+        rect = item.rectangle()
+        item.click_input(
+            coords=(rect.width() // 2, rect.height() // 2),
+        )
+
+        first_name = self.selected_solution_name()
+        if not first_name:
+            return []
+
+        names = [first_name]
+        while len(names) < 200:
+            previous = names[-1]
+            keyboard.send_keys("{DOWN}", vk_packet=False)
+
+            current = previous
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                current = self.selected_solution_name()
+                if current and current != previous:
+                    break
+                time.sleep(0.1)
+
+            if not current or current == previous:
+                break
+            names.append(current)
+
+        return names
+
 
     def card_item(self, index: int = 0):
         """按索引获取指定的案例卡片 ListItem。"""
@@ -448,10 +889,49 @@ class SolutionLibraryPanel:
 
     def select_card(self, index: int = 0) -> str:
         """点击选中指定索引的案例卡片，并返回底部详情区回显的方案名称。"""
+        previous = ""
+        try:
+            previous = self.selected_solution_name()
+        except Exception:
+            pass
         card = self.card_item(index)
         self.page.main_window.set_focus()
         card.click_input()
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            current = self.selected_solution_name()
+            if current and (index == 0 or current != previous):
+                return current
+            time.sleep(0.2)
         return self.selected_solution_name()
+
+    def select_card_by_name(self, name: str) -> str:
+        """按方案名称选中案例卡片，并确认底部详情区回显一致。"""
+        # bring_window_to_front(self.page.main_window.handle)
+        self.page.main_window.set_focus()
+        count = len(self.card_items())
+        seen_names: list[str] = []
+        for index in range(count):
+            current = self.select_card(index)
+            if current and current not in seen_names:
+                seen_names.append(current)
+            if current == name:
+                return current
+
+        raise LookupError(
+            f"案例库中未找到方案“{name}”，"
+            f"卡片数量：{count}，底部方案名：{seen_names}"
+        )
+
+    def open_docs(self) -> None:
+        """点击右下角“教程”按钮，不负责等待外部浏览器。"""
+        button = self.docs_button()
+        button.wait(
+            "exists visible enabled ready",
+            timeout=self.page.timeout,
+        )
+        self.page.main_window.set_focus()
+        button.click_input()
 
     def solution_name_edit(self):
         """定位底部详情区的“方案名称”输入框。"""
@@ -470,11 +950,6 @@ class SolutionLibraryPanel:
             return text
         return edit.iface_value.CurrentValue.strip()
 
-    # def set_solution_name(self, name: str) -> None:
-    #     """修改底部详情区的“方案名称”。"""
-    #     edit = self.solution_name_edit()
-    #     self.page.main_window.set_focus()
-    #     edit.set_edit_text(name)
 
     def path_edit(self):
         """定位底部详情区的“路径”输入框。"""
@@ -507,10 +982,17 @@ class SolutionLibraryPanel:
             "Button",
             "创建",
         )
+    def close(self):
+        """点击 closeWidgetBtn 关闭当前窗口。"""
+        button = self.page._control(
+            f"{WELCOME_DIALOG_ID}.frame.titleBarWidget.closeWidgetBtn",
+            "Button",
+        )
+        button.wait(
+            "exists visible enabled ready",
+        )
+        button.invoke()
 
-    # def click_create(self) -> None:
-    #     """点击“创建”按钮创建当前选中的案例方案。"""
-    #     self.page._click(self.create_button())
 
 
 class WelcomePage:
@@ -521,7 +1003,6 @@ class WelcomePage:
         self.timeout = timeout
         self.recent = RecentUsePanel(self)
         self.solution_library = SolutionLibraryPanel(self)
-
     @classmethod
     def attach(cls, app, timeout: float = 30) -> "WelcomePage":
         """用 Win32 定位欢迎窗口，再通过句柄连接 UIA。"""
@@ -567,6 +1048,30 @@ class WelcomePage:
         )
         self.main_window.set_focus()
         control.click_input()
+
+    def user_manual_button(self):
+        """定位“用户手册”入口。"""
+        return self._control(f"{SIDE_PREFIX}.helpWidget", "Group")
+
+    def open_user_manual(self) -> None:
+        """点击“用户手册”。"""
+        self._click(self.user_manual_button())
+
+    def community_button(self):
+        """定位“在线社区”入口。"""
+        return self._control(f"{SIDE_PREFIX}.widget_community", "Group")
+
+    def open_community(self) -> None:
+        """点击“在线社区”。"""
+        self._click(self.community_button())
+
+    def versionTip_text(self) -> str:
+        """读取版本号，只保留三段数字（如 2.2.2）。"""
+        text = self.version_text().strip()
+        if not text:
+            return ""
+        return text.split("-", 1)[0].strip()
+
 
     def close_button(self):
         """定位首页右上角关闭按钮。"""

@@ -1,0 +1,19 @@
+host: "https://docs.mech-mind.net"
+
+application_templates:
+  有序工件上料: "https://docs.mech-mind.net/zh/suite-tutorial/latest/application-templates/loading-neatly-arranged-target-objects/loading-neatly-arranged-target-objects.html"
+  无序工件上料: "https://docs.mech-mind.net/zh/suite-tutorial/latest/application-templates/loading-randomly-stacked-target-objects/loading-randomly-stacked-target-objects.html"
+  高精度定位装配: "https://docs.mech-mind.net/zh/suite-tutorial/latest/application-templates/high-precision-positioning-and-assembly/high-precision-positioning-and-assembly.html"
+  单品类拆垛: "https://docs.mech-mind.net/zh/suite-tutorial/latest/application-templates/single-case-carton-depalletizing/single-case-carton-depalletizing.html"
+
+
+# {language} 先写死 zh
+help_links:
+  有什么新功能？: "https://docs.mech-mind.net/zh/suite-software-manual/{version}/vision-release-notes.html"
+  用户手册:  "https://docs.mech-mind.net/zh/suite-software-manual/{version}/vision-quick-facts/user-interface-intro.html"
+  Mech-Vision简介: "https://docs.mech-mind.net/zh/suite-software-manual/{version}/vision-quick-facts/user-interface-intro.html"
+  快速入门: "https://docs.mech-mind.net/zh/suite-tutorial/{version}/index.html"
+  步骤参考指南: "https://docs.mech-mind.net/zh/suite-software-manual/{version}/vision-steps/steps.html"
+  视频教程: "https://community.mech-mind.com.cn/t/topic/1587"
+  问答反馈: "https://community.mech-mind.com.cn/c/e997aee7ad94e58cba/5"
+  在线社区: "https://community.mech-mind.com.cn/"

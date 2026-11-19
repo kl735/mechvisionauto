@@ -23,7 +23,6 @@ class MainWindowPage:
         self.project_list = ProjectListPage(main_window, timeout)
         self.project_editor = ProjectEditorPage(main_window, timeout)
         self.title_bar = TitleBar(main_window, timeout)
-
     @classmethod
     def attach(cls, handle: int, timeout: float = 60) -> "MainWindowPage":
         """使用原生窗口句柄连接 UIA 主窗口。"""
@@ -67,6 +66,16 @@ class MainWindowPage:
             title=title,
             control_type="Button",
         )
+
+    def create_from_library_button(self):
+        """定位主窗口“从案例库新建”按钮。"""
+        button = self.main_window.child_window(
+            title="从案例库新建",
+            class_name="QToolButton",
+            control_type="Button",
+        )
+        button.wait("exists visible", timeout=self.timeout)
+        return button
 
     def step_param_dock(self):
         """定位右下角“步骤参数”停靠窗口。"""
