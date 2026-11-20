@@ -453,11 +453,28 @@ class RecentUsePanel:
         return bool(control.wrapper_object().is_selected())
 
     def table(self):
-        """定位最近使用列表。"""
+        """定位最近使用列表下的方案/工程列表。"""
         return self.page._control(
             f"{RECENT_PREFIX}.recentUseTableWidget",
             "Table",
         )
+
+    def table_items(self) -> list[str]:
+        """返回最近使用列表下的方案/工程列表中的所有条目。"""
+        table = self.table()
+        table.wait("exists", timeout=self.page.timeout)
+        return table.descendants(control_type="DataItem")
+
+    def rows_items(self) -> list[list]:
+        """按每 一行（3 个 DataItem） 一组封装最近使用条目。"""
+        items = self.table_items()
+        grouped: list[list] = []
+        for index in range(0, len(items), 3):
+            group = items[index:index + 3]
+            if len(group) != 3:
+                continue
+            grouped.append(group)
+        return grouped
 
     def titles(self) -> list[str]:
         """返回最近使用列表中的文档标题。"""

@@ -881,6 +881,12 @@ def test_VIS_018792(
    pass
 
 
+def test_VIS_018792(
+    welcome_page: WelcomePage,
+) -> None:
+   pass
+
+
 def test_VIS_018794(
     welcome_page: WelcomePage,
 ) -> None:
@@ -1317,4 +1323,4 @@ def test_VIS_018827(
     finally:
         if library.is_open():
             library.back_to_welcome()
-    
+
