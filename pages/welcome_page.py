@@ -29,11 +29,12 @@ TEMPLATE_TITLE_PREFIX = f"{TEMPLATE_PREFIX}.titleBar"
 TEMPLATE_CARD_PREFIX = f"{TEMPLATE_PREFIX}.frame_cardInfo"
 TEMPLATE_DETAIL_PREFIX = f"{TEMPLATE_PREFIX}.widget_detail"
 
-class InvalidSolutionDialog:
-    """封装选择非方案文件夹后弹出的提示框。"""
+class StyledMessageDialog:
+    """封装 mmind::StyledMessageBox 提示框的共用定位与确定操作。"""
 
     MESSAGE_BOX_CLASS = "mmind::StyledMessageBox"
-    EXPECTED_TEXT = "无效方案文件夹"
+    WINDOW_TITLE = "Mech-Vision"
+    EXPECTED_TEXT = ""
 
     def __init__(self, window, timeout: float = 10) -> None:
         self.window = window
@@ -44,8 +45,8 @@ class InvalidSolutionDialog:
         cls,
         reference_hwnd: int,
         timeout: float = 10,
-    ) -> "InvalidSolutionDialog":
-        """等待同一进程中的无效方案提示框出现。"""
+    ) -> "StyledMessageDialog":
+        """等待同一进程中、文案匹配的 StyledMessageBox。"""
         process_id = process_id_from_window(reference_hwnd)
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -58,16 +59,21 @@ class InvalidSolutionDialog:
                     info = window.element_info
                     if (
                         info.class_name != cls.MESSAGE_BOX_CLASS
-                        or info.name != "Mech-Vision"
+                        or info.name != cls.WINDOW_TITLE
                     ):
                         continue
                     dialog = cls(window, timeout)
-                    if cls.EXPECTED_TEXT in dialog.message_text():
+                    if (
+                        not cls.EXPECTED_TEXT
+                        or cls.EXPECTED_TEXT in dialog.message_text()
+                    ):
                         return dialog
                 except Exception:
                     continue
             time.sleep(0.1)
-        raise TimeoutError("未出现“无效方案文件夹”提示框")
+        raise TimeoutError(
+            f"未出现提示框：{cls.EXPECTED_TEXT or cls.MESSAGE_BOX_CLASS}"
+        )
 
     def message_text(self) -> str:
         """获取提示框中的可见文本。"""
@@ -78,6 +84,14 @@ class InvalidSolutionDialog:
         ]
         return "\n".join(dict.fromkeys(texts))
 
+    def named_buttons(self) -> list[str]:
+        """返回提示框中可见按钮的标题。"""
+        return [
+            button.window_text().strip()
+            for button in self.window.descendants(control_type="Button")
+            if button.is_visible() and button.window_text().strip()
+        ]
+
     def confirm_button(self):
         """定位“确定”按钮。"""
         button = self.window.child_window(
@@ -87,19 +101,29 @@ class InvalidSolutionDialog:
         button.wait("exists visible enabled", timeout=self.timeout)
         return button
 
-    # def named_buttons(self) -> list[str]:
-    #     """返回所有有名称的可见按钮。"""
-    #     return [
-    #         button.window_text().strip()
-    #         for button in self.window.descendants(control_type="Button")
-    #         if button.is_visible() and button.window_text().strip()
-    #     ]
-
     def confirm(self) -> None:
         """点击“确定”并等待提示框关闭。"""
         hwnd = self.window.handle
         self.confirm_button().invoke()
         wait_window_hidden(hwnd, timeout=self.timeout)
+
+
+class InvalidSolutionDialog(StyledMessageDialog):
+    """封装选择非方案文件夹后弹出的提示框。"""
+
+    EXPECTED_TEXT = "无效方案文件夹"
+
+
+class LatestLibraryResourceDialog(StyledMessageDialog):
+    """封装“当前已是最新案例库资源”提示框。"""
+
+    EXPECTED_TEXT = "当前已是最新案例库资源"
+
+
+class DuplicateNameDialog(StyledMessageDialog):
+    """封装案例库创建时已存在同名方案/工程的提示框。"""
+
+    EXPECTED_TEXT = "此位置已存在同名方案"
 
 
 class DownloadConfirmDialog:
@@ -190,68 +214,6 @@ class DownloadConfirmDialog:
         hwnd = self.window.handle
         self.window.set_focus()
         button.invoke()
-        wait_window_hidden(hwnd, timeout=self.timeout)
-
-
-class LatestLibraryResourceDialog:
-    """封装“当前已是最新案例库资源”提示框。"""
-
-    MESSAGE_BOX_CLASS = "mmind::StyledMessageBox"
-    EXPECTED_TEXT = "当前已是最新案例库资源"
-
-    def __init__(self, window, timeout: float = 10) -> None:
-        self.window = window
-        self.timeout = timeout
-
-    @classmethod
-    def wait_for_open(
-        cls,
-        reference_hwnd: int,
-        timeout: float = 10,
-    ) -> "LatestLibraryResourceDialog":
-        """等待同一进程中的“已是最新资源”提示框。"""
-        process_id = process_id_from_window(reference_hwnd)
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            for hwnd in visible_process_windows(process_id):
-                if hwnd == reference_hwnd:
-                    continue
-                try:
-                    app = Application(backend="uia").connect(handle=hwnd)
-                    window = app.window(handle=hwnd)
-                    info = window.element_info
-                    if info.class_name != cls.MESSAGE_BOX_CLASS:
-                        continue
-                    dialog = cls(window, timeout)
-                    if cls.EXPECTED_TEXT in dialog.message_text():
-                        return dialog
-                except Exception:
-                    continue
-            time.sleep(0.1)
-        raise TimeoutError("未出现“当前已是最新案例库资源”提示框")
-
-    def message_text(self) -> str:
-        """读取提示框文本。"""
-        texts = [
-            control.window_text().strip()
-            for control in self.window.descendants(control_type="Text")
-            if control.is_visible() and control.window_text().strip()
-        ]
-        return "\n".join(dict.fromkeys(texts))
-
-    def confirm_button(self):
-        """定位“确定”按钮。"""
-        button = self.window.child_window(
-            title="确定",
-            control_type="Button",
-        )
-        button.wait("exists visible enabled", timeout=self.timeout)
-        return button
-
-    def confirm(self) -> None:
-        """点击确定并等待提示框关闭。"""
-        hwnd = self.window.handle
-        self.confirm_button().invoke()
         wait_window_hidden(hwnd, timeout=self.timeout)
 
 
@@ -466,15 +428,49 @@ class RecentUsePanel:
         return table.descendants(control_type="DataItem")
 
     def rows_items(self) -> list[list]:
-        """按每 一行（3 个 DataItem） 一组封装最近使用条目。"""
+        """按当前列表列数（方案 3 / 工程 4）分组封装最近使用条目。"""
+        step = 4 if self.is_projects_selected() else 3
         items = self.table_items()
         grouped: list[list] = []
-        for index in range(0, len(items), 3):
-            group = items[index:index + 3]
-            if len(group) != 3:
+        for index in range(0, len(items), step):
+            group = items[index:index + step]
+            if len(group) != step:
                 continue
             grouped.append(group)
         return grouped
+
+    def name_items(self) -> list:
+        """收集每行名称格控件。"""
+        step = 4 if self.is_projects_selected() else 3
+        items = self.table_items()
+        names = []
+        for index, item in enumerate(items):
+            if index % step == 0:
+                names.append(item)
+        return names
+
+    def select_item_by_name(self, name: str):
+        """按名称定位最近使用列表中对应的名称格控件。"""
+        for item in self.name_items():
+            if item.window_text().strip() == name:
+                return item
+        return None
+
+    def folder_items_by_name(self):
+        """按名称收集其对应的文件夹控件。"""
+        mapping = {}
+        for group in self.rows_items():
+            name = group[0].window_text().strip()
+            if not name:
+                continue
+            mapping[name] = group[-1]
+        return mapping
+
+
+    def name_texts(self) -> list[str]:
+        """返回最近使用列表中的文档标题。"""
+        names = self.name_items()
+        return [item.window_text().strip() for item in names]
 
     def titles(self) -> list[str]:
         """返回最近使用列表中的文档标题。"""
@@ -489,23 +485,6 @@ class RecentUsePanel:
             if text:
                 names.append(text)
         return names
-
-    def item(self, name: str, found_index: int = 0):
-        """按名称定位最近使用条目。"""
-        table = self.table()
-        table.wait("exists", timeout=self.page.timeout)
-        return table.child_window(
-            title=name,
-            control_type="DataItem",
-            found_index=found_index,
-        )
-
-    def open(self, name: str, found_index: int = 0) -> None:
-        """双击打开指定的最近使用条目。"""
-        item = self.item(name, found_index)
-        item.wait("exists", timeout=self.page.timeout)
-        item.double_click_input()
-
 
 class SolutionLibraryPanel:
     """封装点击“从案例库新建”后切换到的案例库（mmind__TemplateProjectWidget）页面。"""

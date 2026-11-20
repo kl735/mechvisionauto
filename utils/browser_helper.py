@@ -10,6 +10,7 @@ import win32gui  # pyright: ignore[reportMissingModuleSource]
 from pywinauto import Application
 
 
+
 BROWSER_WINDOW_CLASSES = {
     "Chrome_WidgetWin_1",  # Chrome、Edge
     "MozillaWindowClass",  # Firefox

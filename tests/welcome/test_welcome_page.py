@@ -20,10 +20,12 @@ from pages.welcome_page import (
     SolutionLibraryPanel,
     DownloadConfirmDialog,
     LatestLibraryResourceDialog,
+    DuplicateNameDialog,
 )
 from pages.main_window_page import MainWindowPage
 from services import VisionSdkClient
 from utils.browser_helper import urls_match, wait_for_docs_url
+from utils.explorer_helper import ExplorerWindow
 from utils.mech_vision_app import EXE_PATH, wait_for_main_window
 from utils.solution_library_resources import (
     LIBRARY_GROUP_PATH,
@@ -716,14 +718,6 @@ def _assert_search_hit(
     assert keyword in selected, (
         f"{label} 搜索未命中原案例：关键字={keyword}，选中={selected}"
     )
-    # actual = library.card_names()
-    # assert actual, f"{label} 搜索“{keyword}”后没有卡片"
-    # assert keyword in actual, (
-    #     f"{label} 搜索未命中原案例：关键字={keyword}，界面={actual}"
-    # )
-    # assert all(keyword in name for name in actual), (
-    #     f"{label} 搜索结果包含不匹配案例：关键字={keyword}，界面={actual}"
-    # )
 
 
 def _assert_search_miss(library: SolutionLibraryPanel, label: str) -> None:
@@ -878,20 +872,82 @@ def test_VIS_018796(
 def test_VIS_018792(
     welcome_page: WelcomePage,
 ) -> None:
-   pass
+    """验证最近使用中方案和工程的文件夹按钮点击后，欢迎页保持显示。"""
+    assert welcome_page.recent.is_solutions_selected(), "方案列表未选中"
+    assert len(welcome_page.recent.table_items()), "方案列表为空"
+    # 保存第一个方案的名称
+    name = welcome_page.recent.name_texts()[0]
+    # 点击第一个方案对应的文件夹按钮
+    folder_button = welcome_page.recent.folder_items_by_name()[name]
+    folder_button.click_input()
 
+    # 等待文件夹选择框显示
+    explorer = ExplorerWindow.wait_for_open(folder_name=name)
+    # time.sleep(10)
+    # 关闭对应的文件夹窗口
+    explorer.close()
+    assert welcome_page.exists(timeout=5), "打开文件夹后欢迎页未保持显示"
 
-def test_VIS_018792(
-    welcome_page: WelcomePage,
-) -> None:
-   pass
+    # 切换到工程列表下，重复上述操作
+    welcome_page.recent.show_projects()
+    assert welcome_page.recent.is_projects_selected(), "工程列表未选中"
+    assert len(welcome_page.recent.table_items()), "工程列表为空"
+    # 保存第一个工程的名称
+    name = welcome_page.recent.name_texts()[0]
+    # 点击第一个工程对应的文件夹按钮
+    folder_button = welcome_page.recent.folder_items_by_name()[name]
+    folder_button.click_input()
+    # 等待文件夹选择框显示
+    explorer = ExplorerWindow.wait_for_open(folder_name=name)
+    # 关闭对应的文件夹窗口
+    explorer.close()
+    assert welcome_page.exists(timeout=5), "打开文件夹后欢迎页未保持显示"
 
 
 def test_VIS_018794(
     welcome_page: WelcomePage,
 ) -> None:
-    pass
+    """双击最近使用的方案后，欢迎页关闭并进入主界面。"""
+    assert welcome_page.exists(timeout=10), "欢迎页面未显示"
+    assert welcome_page.recent.is_solutions_selected(), "方案列表未选中"
+    assert len(welcome_page.recent.table_items()), "方案列表为空"
+    name = welcome_page.recent.name_texts()[0]
+    welcome_handle = welcome_page.main_window.handle   # 先存
+    welcome_page.recent.name_items()[0].double_click_input()
+    # 查看欢迎页是否消失
+    assert wait_window_hidden(welcome_handle, timeout=60), "双击后欢迎页未关闭"
+    # assert welcome_page.exists(timeout=60), "双击后未进入主界面"
+    # 判断是否进入主页面
+    main_handle = wait_for_main_window(timeout=60)
+    main_page = MainWindowPage.attach(main_handle, timeout=60)
+    assert main_page.exists(timeout=10), "双击后未进入主界面"
+    assert main_page.project_list.solution_name() == name, "双击后未进入对应的方案"
 
+
+def test_VIS_018794_2(
+    welcome_page: WelcomePage,
+) -> None:
+    """双击最近使用的工程后，欢迎页关闭并进入主界面。"""
+    assert welcome_page.exists(timeout=10), "欢迎页面未显示"
+    assert welcome_page.recent.is_solutions_selected(), "方案列表未选中"
+
+    # 切换到工程雷列表下
+    welcome_page.recent.show_projects()
+    assert welcome_page.recent.is_projects_selected(), "工程列表未选中"
+    assert len(welcome_page.recent.table_items()), "工程列表为空"
+
+    name = welcome_page.recent.name_texts()[0]
+    welcome_handle = welcome_page.main_window.handle   # 先存
+    welcome_page.recent.name_items()[0].double_click_input()
+    # 查看欢迎页是否消失
+    assert wait_window_hidden(welcome_handle, timeout=60), "双击后欢迎页未关闭"
+    # assert welcome_page.exists(timeout=60), "双击后未进入主界面"
+    # 判断是否进入主页面
+    main_handle = wait_for_main_window(timeout=60)
+    main_page = MainWindowPage.attach(main_handle, timeout=60)
+    assert main_page.exists(timeout=10), "双击后未进入主界面"
+    assert main_page.project_list.solution_name() == name, "双击后未进入对应的方案"
+    
 
 ORDERED_LOADING_CARD = "有序工件上料"
 @pytest.fixture
@@ -984,12 +1040,6 @@ def test_download_does_not_restore_deleted_library_group(
     finally:
         if library.is_open():
             library.back_to_welcome()
-
-
-
-# def test_VIS_018824(
-# ) -> None:
-#     """同时删除卡片和分组后，下载只恢复卡片、不恢复分组。"""
     
 
 RENAMED_LIBRARY_GROUP = "新的分组名称"
@@ -1323,4 +1373,55 @@ def test_VIS_018827(
     finally:
         if library.is_open():
             library.back_to_welcome()
+
+
+
+def test_VIS_018854(
+    welcome_page: WelcomePage,
+) -> None:
+    """已有方案开启的情况下，从vision主界面“文件”菜单栏开启案例库，下载联网资源追加同名的vision工程到当前方案"""
+    assert welcome_page.exists(timeout=10), "欢迎页面未显示"
+    assert welcome_page.recent.is_solutions_selected(), "方案列表未选中"
+    assert len(welcome_page.recent.table_items()), "方案列表为空"
+    
+    # 根据名称查找有序工件上料卡片
+    print(welcome_page.recent.name_items())
+    ordered_loading_card = welcome_page.recent.select_item_by_name(ORDERED_LOADING_CARD)
+    print(ordered_loading_card)
+    assert ordered_loading_card , "有序工件上料卡片未找到"
+    ordered_loading_card.double_click_input()
+
+    # 判断主窗口是否出现
+    main_handle = wait_for_main_window(timeout=60)
+    main_page = MainWindowPage.attach(main_handle, timeout=60)
+    assert main_page.exists(timeout=10), "主窗口未出现"
+
+    # 1. 点击从案例库新建
+    main_handle = main_page.handle
+    main_page.create_from_library_button().click_input()
+    # 2. 判断案例库是否出现（主界面仍在）
+    library = SolutionLibraryPanel.wait_for_open(main_handle)
+    assert library.is_open(), "案例库页面未打开"
+    assert main_page.exists(timeout=5), "打开案例库后主窗口消失"
+    # 3. 搜索「有序工件上料」，应能搜到卡片
+    library.search(ORDERED_LOADING_CARD)
+    wait_until(
+        timeout=10,
+        retry_interval=0.2,
+        func=lambda: len(library.card_items()) > 0,
+        value=True,
+    )
+    selected = library.select_card(0)
+    assert selected == ORDERED_LOADING_CARD
+    # 4. 点击创建
+    library.create_button().invoke()
+    dialog = DuplicateNameDialog.wait_for_open(
+        library.page.main_window.handle,
+    )
+    assert DuplicateNameDialog.EXPECTED_TEXT in dialog.message_text()
+    assert "确定" in dialog.named_buttons()
+    dialog.confirm()
+    assert library.is_open(), "确定后案例库页面未保持显示"
+
+
 
